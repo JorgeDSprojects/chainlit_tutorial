@@ -39,7 +39,7 @@ async def start():
             cl.input_widget.TextInput(
                 id="ModelName",
                 label="Nombre del Modelo (Opcional)",
-                initial="llama3",
+                initial="llama2",
                 description="Ej: gpt-4, llama3, mistralai/mistral-7b-instruct"
             )
         ]
@@ -51,7 +51,7 @@ async def main(message: cl.Message):
     # ... código de Fase 2 ...
     chat_settings = cl.user_session.get("chat_settings")
     provider = "ollama"
-    model_name = "llama3"
+    model_name = "llama2"
     
     if chat_settings:
         provider = chat_settings.get("ModelProvider", "ollama")

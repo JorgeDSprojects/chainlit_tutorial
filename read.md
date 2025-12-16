@@ -1,8 +1,25 @@
 chainlit run app.py
 uvicorn main:app --reload
 docker exec -it ollama-infra ollama list
+para dar de alta un usuario
+
+La solución (Crear usuario vía API):
+
+Ve a la documentación automática de FastAPI: http://localhost:8000/docs.
+
+Busca el endpoint POST /api/register.
+
+Haz clic en "Try it out" y envía un JSON:
+
+{
+  "email": "test@test.com",
+  "password": "123"
+}
 
 
+Si responde 200 OK, el usuario está en la base de datos.
+
+Loguearse: Vuelve al chat (/chat) e inicia sesión con test@test.com y 123.
 
 NAME                                                        ID              SIZE      MODIFIED    
 llama2:latest                                               78e26419b446    3.8 GB    5 days ago

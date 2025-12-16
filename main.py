@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from chainlit.utils import mount_chainlit
 from src.config import settings
 from src.db.database import engine, Base
-from src.routers import users
+from src.routers import users 
 import src.db.models 
 
 # --- LIFESPAN (Ciclo de vida) ---
@@ -13,17 +13,18 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
-    # Cierre: Liberar conexiones (SOLUCIONA EL BLOQUEO AL CERRAR)
+    # Cierre: Liberar conexiones
     await engine.dispose()
 
 # Iniciamos FastAPI
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
-# Registrar rutas
+# Registrar rutas de API (deben ir antes de montar Chainlit)
 app.include_router(users.router, prefix="/api", tags=["Users"])
 
 # Montar Chainlit
-mount_chainlit(app=app, target="src/app.py", path="/chat")
+# CAMBIO IMPORTANTE: Usamos "/" en lugar de "/chat" para evitar el error 404 del WebSocket
+mount_chainlit(app=app, target="src/app.py", path="/")
 
 if __name__ == "__main__":
     import uvicorn
