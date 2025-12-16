@@ -1,20 +1,30 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from chainlit.utils import mount_chainlit
 from src.config import settings
+from src.db.database import engine, Base
+from src.routers import users
+import src.db.models 
 
-app = FastAPI(title=settings.APP_NAME)
+# --- LIFESPAN (Ciclo de vida) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicio: Crear tablas
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # Cierre: Liberar conexiones (SOLUCIONA EL BLOQUEO AL CERRAR)
+    await engine.dispose()
 
-# Endpoint de API normal (para demostrar que FastAPI funciona independientemente)
-@app.get("/api/status")
-def read_root():
-    return {"status": "ok", "app": settings.APP_NAME}
+# Iniciamos FastAPI
+app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 
-# --- Montar Chainlit ---
-# target: ruta relativa al archivo donde está la lógica de chainlit
-# path: la URL donde quieres ver el chat (ej: /chat o la raíz /)
-mount_chainlit(app=app, target="src/app.py", path="/")
+# Registrar rutas
+app.include_router(users.router, prefix="/api", tags=["Users"])
+
+# Montar Chainlit
+mount_chainlit(app=app, target="src/app.py", path="/chat")
 
 if __name__ == "__main__":
     import uvicorn
-    # Se recomienda usar reload=True solo en desarrollo
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
