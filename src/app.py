@@ -6,6 +6,7 @@ from src.db.models import User, Conversation
 from src.auth.utils import verify_password
 from src.services.llm_service import llm_service
 from src.services.chainlit_data_layer import ChainlitDataLayer
+from src.services.user_settings_service import user_settings_service
 from src.config import settings
 
 # Configure Chainlit data layer for thread persistence
@@ -114,7 +115,23 @@ async def start():
     # Get available Ollama models dynamically
     ollama_models = await llm_service.get_ollama_models()
     
-    # Configuración del chat (Widgets) con modelos dinámicos
+    # Load user settings
+    default_model = "llama2"
+    default_temperature = 0.7
+    
+    if user:
+        user_settings = await user_settings_service.get_settings(user.identifier)
+        if user_settings:
+            default_model = user_settings.get("default_model", "llama2")
+            default_temperature = user_settings.get("temperature", 0.7)
+    
+    # Find initial index for default model
+    try:
+        initial_model_index = ollama_models.index(default_model)
+    except ValueError:
+        initial_model_index = 0
+    
+    # Configuración del chat (Widgets) con modelos dinámicos y settings del usuario
     chat_settings = await cl.ChatSettings(
         [
             cl.input_widget.Select(
@@ -127,13 +144,13 @@ async def start():
                 id="ModelName",
                 label="Modelo de Ollama",
                 values=ollama_models,
-                initial_index=0,
+                initial_index=initial_model_index,
                 description="Selecciona un modelo de Ollama instalado"
             ),
             cl.input_widget.Slider(
                 id="Temperature",
                 label="Temperatura",
-                initial=0.7,
+                initial=default_temperature,
                 min=0.0,
                 max=1.0,
                 step=0.1,
@@ -221,4 +238,19 @@ async def main(message: cl.Message):
 @cl.on_settings_update
 async def setup_agent(settings):
     cl.user_session.set("chat_settings", settings)
-    await cl.Message(content=f"✅ Proveedor cambiado a: {settings['ModelProvider']}").send()
+    
+    # Persist settings to database
+    user = cl.user_session.get("user")
+    if user:
+        model_name = settings.get("ModelName")
+        temperature = settings.get("Temperature")
+        
+        await user_settings_service.save_settings(
+            user_email=user.identifier,
+            default_model=model_name,
+            temperature=temperature
+        )
+        
+        await cl.Message(content=f"✅ Configuración guardada: {model_name} (temp: {temperature})").send()
+    else:
+        await cl.Message(content=f"✅ Proveedor cambiado a: {settings['ModelProvider']}").send()
