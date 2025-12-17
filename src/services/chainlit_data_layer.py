@@ -124,7 +124,7 @@ class ChainlitDataLayer(BaseDataLayer):
             
             # Apply pagination
             page = pagination.first or 0
-            page_size = pagination.cursor or 20
+            page_size = 20  # Default page size
             query = query.offset(page).limit(page_size)
             
             # Execute query
@@ -281,3 +281,33 @@ class ChainlitDataLayer(BaseDataLayer):
                 if user:
                     return user.email
             return ""
+    
+    # Implement remaining abstract methods with minimal functionality
+    
+    def build_debug_url(self) -> str:
+        """Build debug URL - not implemented."""
+        return ""
+    
+    async def close(self) -> None:
+        """Close data layer connections - not needed for our implementation."""
+        pass
+    
+    async def create_element(self, element):
+        """Create an element (file/attachment) - not implemented."""
+        pass
+    
+    async def delete_element(self, element_id: str, thread_id: Optional[str] = None):
+        """Delete an element - not implemented."""
+        pass
+    
+    async def get_element(self, thread_id: str, element_id: str):
+        """Get an element - not implemented."""
+        return None
+    
+    async def delete_feedback(self, feedback_id: str) -> bool:
+        """Delete feedback - not implemented."""
+        return False
+    
+    async def upsert_feedback(self, feedback) -> str:
+        """Create or update feedback - not implemented."""
+        return ""

@@ -79,3 +79,11 @@ pip-wheel-metadata/
 # Chainlit local logs or DBs (if any)
 chainlit.logs
 *.db
+
+# Development scripts
+test_data_layer.py
+create_test_user.py
+migrate_add_thread_id.py
+init_db.py
+.env
+chat.db
