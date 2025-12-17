@@ -8,7 +8,7 @@ from chainlit.data import BaseDataLayer
 from chainlit.types import ThreadDict, Pagination, ThreadFilter, PaginatedResponse
 from chainlit.step import StepDict
 from sqlalchemy.future import select
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from src.db.database import async_session
 from src.db.models import Conversation, Message, User
 
@@ -131,12 +131,12 @@ class ChainlitDataLayer(BaseDataLayer):
             result = await session.execute(query)
             conversations = result.scalars().all()
             
-            # Get total count for pagination
-            count_query = select(Conversation)
+            # Get total count for pagination (efficient count query)
+            count_query = select(func.count(Conversation.id))
             if filters.userId:
                 count_query = count_query.filter(Conversation.user_id == int(filters.userId))
             count_result = await session.execute(count_query)
-            total = len(count_result.scalars().all())
+            total = count_result.scalar() or 0
             
             # Convert to ThreadDict format (without loading all messages)
             threads = []

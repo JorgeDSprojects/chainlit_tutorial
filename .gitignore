@@ -80,10 +80,10 @@ pip-wheel-metadata/
 chainlit.logs
 *.db
 
-# Development scripts
+# Development test scripts (not needed in production)
 test_data_layer.py
 create_test_user.py
-migrate_add_thread_id.py
-init_db.py
+
+# Environment and database files (should not be committed)
 .env
 chat.db
