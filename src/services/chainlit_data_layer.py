@@ -176,7 +176,7 @@ class ChainlitDataLayer(BaseDataLayer):
             conversation = result.scalars().first()
             
             if conversation:
-                await session.delete(conversation)
+                session.delete(conversation)
                 await session.commit()
 
     async def list_threads(
@@ -291,5 +291,49 @@ class ChainlitDataLayer(BaseDataLayer):
     async def upsert_feedback(self, feedback_dict: Dict) -> None:
         """
         Upsert feedback (not implemented).
+        """
+        pass
+
+    async def get_thread_author(self, thread_id: str) -> str:
+        """
+        Get the author of a thread.
+        
+        Args:
+            thread_id: Thread/conversation ID
+            
+        Returns:
+            User identifier (email)
+        """
+        async with async_session() as session:
+            result = await session.execute(
+                select(Conversation).filter(Conversation.id == int(thread_id))
+            )
+            conversation = result.scalars().first()
+            
+            if conversation:
+                user_result = await session.execute(
+                    select(User).filter(User.id == conversation.user_id)
+                )
+                user = user_result.scalars().first()
+                if user:
+                    return user.email
+            
+            return "unknown"
+
+    async def create_element(self, element: Element) -> None:
+        """
+        Create an element (not implemented - not using file storage yet).
+        """
+        pass
+
+    async def build_debug_url(self) -> str:
+        """
+        Build debug URL (not implemented).
+        """
+        return ""
+
+    async def close(self) -> None:
+        """
+        Close connections (not needed - using context managers).
         """
         pass

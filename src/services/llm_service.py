@@ -2,6 +2,7 @@ from openai import AsyncOpenAI
 from src.config import settings
 import aiohttp
 from typing import List, Dict
+from urllib.parse import urlparse, urlunparse
 
 class LLMService:
     def __init__(self):
@@ -45,8 +46,12 @@ class LLMService:
             List of model names available in Ollama
         """
         try:
-            # Extract base URL without /v1 suffix
-            base_url = settings.OLLAMA_BASE_URL.replace("/v1", "")
+            # Extract base URL without /v1 suffix using proper URL parsing
+            parsed = urlparse(settings.OLLAMA_BASE_URL)
+            # Remove /v1 from the path if present
+            path = parsed.path.rstrip('/').removesuffix('/v1')
+            # Construct base URL
+            base_url = urlunparse((parsed.scheme, parsed.netloc, '', '', '', ''))
             url = f"{base_url}/api/tags"
             
             async with aiohttp.ClientSession() as session:

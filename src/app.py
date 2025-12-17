@@ -7,7 +7,12 @@ from src.services.llm_service import llm_service
 from src.services.conversation_service import create_conversation, add_message, get_conversation_history
 from src.config import settings
 from src.services.chainlit_data_layer import ChainlitDataLayer
-from src.services.user_settings_service import get_or_create_settings, save_settings
+from src.services.user_settings_service import (
+    get_or_create_settings, 
+    save_settings,
+    DEFAULT_MODEL,
+    DEFAULT_TEMPERATURE
+)
 
 # Register data layer for thread/history support
 cl.data_layer = ChainlitDataLayer()
@@ -56,8 +61,8 @@ async def start():
     ollama_models = await llm_service.get_ollama_models()
     
     # Get initial values from user settings or use defaults
-    initial_model = user_settings_data.get("default_model", "llama2") if user_settings_data else "llama2"
-    initial_temperature = user_settings_data.get("temperature", 0.7) if user_settings_data else 0.7
+    initial_model = user_settings_data.get("default_model", DEFAULT_MODEL) if user_settings_data else DEFAULT_MODEL
+    initial_temperature = user_settings_data.get("temperature", DEFAULT_TEMPERATURE) if user_settings_data else DEFAULT_TEMPERATURE
     
     # Find the index of the initial model in the list
     initial_model_index = 0
@@ -115,21 +120,26 @@ async def on_chat_resume(thread: dict):
         
         # Display previous messages to user
         if history:
-            # Group messages by pairs (user + assistant)
-            for i in range(0, len(history), 2):
-                user_msg = history[i] if i < len(history) else None
-                assistant_msg = history[i + 1] if i + 1 < len(history) else None
+            # Display each message based on its role
+            for msg in history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
                 
-                if user_msg and user_msg.get("role") == "user":
+                if role == "user":
                     await cl.Message(
-                        content=user_msg.get("content", ""),
+                        content=content,
                         author="user"
                     ).send()
-                
-                if assistant_msg and assistant_msg.get("role") == "assistant":
+                elif role == "assistant":
                     await cl.Message(
-                        content=assistant_msg.get("content", ""),
+                        content=content,
                         author="assistant"
+                    ).send()
+                elif role == "system":
+                    # Optionally display system messages differently
+                    await cl.Message(
+                        content=f"**System:** {content}",
+                        author="system"
                     ).send()
             
             await cl.Message(f"✅ Conversación cargada con {len(history)} mensajes. Puedes continuar donde lo dejaste.").send()
@@ -146,13 +156,13 @@ async def main(message: cl.Message):
     # Obtener configuración del chat
     chat_settings = cl.user_session.get("chat_settings")
     provider = "ollama"
-    model_name = "llama2"
-    temperature = 0.7
+    model_name = DEFAULT_MODEL
+    temperature = DEFAULT_TEMPERATURE
     
     if chat_settings:
         provider = chat_settings.get("ModelProvider", "ollama")
-        model_name = chat_settings.get("ModelName", "llama2")
-        temperature = chat_settings.get("Temperature", 0.7)
+        model_name = chat_settings.get("ModelName", DEFAULT_MODEL)
+        temperature = chat_settings.get("Temperature", DEFAULT_TEMPERATURE)
 
     # Obtener historial de mensajes
     message_history = cl.user_session.get("message_history", [])

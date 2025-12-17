@@ -7,6 +7,10 @@ from sqlalchemy.future import select
 from src.db.database import async_session
 from src.db.models import UserSettings, User
 
+# Default settings constants
+DEFAULT_MODEL = "llama2"
+DEFAULT_TEMPERATURE = 0.7
+
 
 async def get_settings(user_id: int) -> Optional[Dict]:
     """
@@ -70,8 +74,8 @@ async def save_settings(
             # Create new settings
             settings = UserSettings(
                 user_id=user_id,
-                default_model=default_model or "llama2",
-                temperature=temperature if temperature is not None else 0.7,
+                default_model=default_model or DEFAULT_MODEL,
+                temperature=temperature if temperature is not None else DEFAULT_TEMPERATURE,
                 favorite_models=favorite_models or []
             )
             session.add(settings)
@@ -102,8 +106,8 @@ async def get_or_create_settings(user_id: int) -> Dict:
         # Create default settings
         settings = await save_settings(
             user_id=user_id,
-            default_model="llama2",
-            temperature=0.7,
+            default_model=DEFAULT_MODEL,
+            temperature=DEFAULT_TEMPERATURE,
             favorite_models=[]
         )
     
