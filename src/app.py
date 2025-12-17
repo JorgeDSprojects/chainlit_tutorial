@@ -111,7 +111,10 @@ async def start():
                 # Set the thread_id for Chainlit
                 cl.user_session.set("thread_id", str(conversation.id))
 
-    # Configuración del chat (Widgets)
+    # Get available Ollama models dynamically
+    ollama_models = await llm_service.get_ollama_models()
+    
+    # Configuración del chat (Widgets) con modelos dinámicos
     chat_settings = await cl.ChatSettings(
         [
             cl.input_widget.Select(
@@ -120,11 +123,21 @@ async def start():
                 values=["ollama", "openai", "openrouter"],
                 initial_index=0
             ),
-            cl.input_widget.TextInput(
+            cl.input_widget.Select(
                 id="ModelName",
-                label="Nombre del Modelo (Opcional)",
-                initial="llama2",
-                description="Ej: gpt-4, llama3, mistralai/mistral-7b-instruct"
+                label="Modelo de Ollama",
+                values=ollama_models,
+                initial_index=0,
+                description="Selecciona un modelo de Ollama instalado"
+            ),
+            cl.input_widget.Slider(
+                id="Temperature",
+                label="Temperatura",
+                initial=0.7,
+                min=0.0,
+                max=1.0,
+                step=0.1,
+                description="Controla la creatividad: 0.0 = Determinista, 1.0 = Creativo"
             )
         ]
     ).send()
@@ -135,10 +148,12 @@ async def main(message: cl.Message):
     chat_settings = cl.user_session.get("chat_settings")
     provider = "ollama"
     model_name = "llama2"
+    temperature = 0.7
     
     if chat_settings:
         provider = chat_settings.get("ModelProvider", "ollama")
-        model_name = chat_settings.get("ModelName", None)
+        model_name = chat_settings.get("ModelName", "llama2")
+        temperature = chat_settings.get("Temperature", 0.7)
 
     # Obtener historial de mensajes
     message_history = cl.user_session.get("message_history", [])
@@ -177,7 +192,8 @@ async def main(message: cl.Message):
         message=message.content, 
         provider=provider, 
         specific_model=model_name,
-        history=message_history
+        history=message_history,
+        temperature=temperature
     ):
         full_response += token
         await msg.stream_token(token)
