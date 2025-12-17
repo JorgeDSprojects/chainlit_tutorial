@@ -11,6 +11,14 @@ class Settings(BaseSettings):
 
     # AÑADIDO: Clave de autenticación para Chainlit (DEBE EXISTIR AQUÍ)
     CHAINLIT_AUTH_SECRET: str 
+    
+    # Fase 5: Sistema de Memoria - Configuración de Límites
+    MAX_CONTEXT_MESSAGES: int = 15
+    VISION_MODEL: str = "llama3.2-vision"
+    PDF_CHUNK_SIZE: int = 2000
+    PDF_CHUNK_OVERLAP: int = 200
+    MAX_PDF_SIZE_MB: int = 10
+    MAX_IMAGE_SIZE_MB: int = 5
 
     class Config:
         env_file = ".env"
