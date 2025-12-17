@@ -45,7 +45,7 @@ class UserSettings(Base):
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)
     default_model = Column(String, default="llama2")
     temperature = Column(Float, default=0.7)
-    favorite_models = Column(JSON, default=list)  # Lista de modelos favoritos
+    favorite_models = Column(JSON, default=lambda: [])  # Lista de modelos favoritos
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -7,7 +7,13 @@ class LLMService:
     def __init__(self):
         # Inicializamos los clientes. 
         # Nota: En producción, podrías usar Singleton o Inyección de Dependencias.
-        pass
+        self._http_client = None
+    
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """Get or create shared HTTP client for API calls"""
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=5.0)
+        return self._http_client
     
     async def get_ollama_models(self) -> List[str]:
         """
@@ -19,23 +25,23 @@ class LLMService:
             base_url = settings.OLLAMA_BASE_URL.replace("/v1", "")
             api_url = f"{base_url}/api/tags"
             
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(api_url)
-                response.raise_for_status()
-                
-                data = response.json()
-                models = data.get("models", [])
-                
-                # Extract model names
-                model_names = [model.get("name", "").split(":")[0] for model in models]
-                
-                # Remove duplicates and empty strings
-                model_names = list(set(filter(None, model_names)))
-                
-                # Sort alphabetically
-                model_names.sort()
-                
-                return model_names if model_names else ["llama2"]
+            client = self._get_http_client()
+            response = await client.get(api_url)
+            response.raise_for_status()
+            
+            data = response.json()
+            models = data.get("models", [])
+            
+            # Extract model names
+            model_names = [model.get("name", "").split(":")[0] for model in models]
+            
+            # Remove duplicates and empty strings
+            model_names = list(set(filter(None, model_names)))
+            
+            # Sort alphabetically
+            model_names.sort()
+            
+            return model_names if model_names else ["llama2"]
                 
         except Exception as e:
             print(f"Error fetching Ollama models: {e}")

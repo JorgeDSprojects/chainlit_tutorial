@@ -76,6 +76,7 @@ class UserSettingsService:
                 # Create new settings
                 settings = UserSettings(user_id=user.id)
                 session.add(settings)
+                await session.flush()  # Ensure the object is persisted before updating
             
             # Update settings
             if default_model is not None:
@@ -113,6 +114,7 @@ class UserSettingsService:
             if not settings:
                 settings = UserSettings(user_id=user.id, favorite_models=[model_name])
                 session.add(settings)
+                await session.flush()
             else:
                 favorites = settings.favorite_models or []
                 if model_name not in favorites:

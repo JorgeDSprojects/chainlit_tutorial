@@ -143,7 +143,7 @@ class ChainlitDataLayer(BaseDataLayer):
                 )
                 conversation = result.scalars().first()
                 if conversation:
-                    await session.delete(conversation)
+                    session.delete(conversation)
                     await session.commit()
             except (ValueError, TypeError):
                 pass
