@@ -29,6 +29,8 @@ async def start():
         # Crear nueva conversación vinculada al usuario (Memoria a Largo Plazo)
         try:
             user_id = user.metadata.get("id")
+            if user_id is None:
+                raise ValueError("El usuario no tiene un ID válido en metadata")
             conversation = await create_conversation(user_id=user_id, title="Nueva Conversación")
             cl.user_session.set("conversation_id", conversation.id)
         except Exception as e:

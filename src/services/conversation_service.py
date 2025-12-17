@@ -3,7 +3,6 @@ Servicio para gestionar conversaciones y mensajes en la base de datos.
 Implementa la Memoria a Largo Plazo (Fase 5.3).
 """
 from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.database import async_session
 from src.db.models import Conversation, Message, User
 from typing import Optional, List, Dict
@@ -53,6 +52,11 @@ async def add_message(conversation_id: int, role: str, content: str) -> Message:
     Returns:
         Message: El mensaje creado
     """
+    # Validar rol
+    valid_roles = ["user", "assistant", "system"]
+    if role not in valid_roles:
+        raise ValueError(f"Rol inválido '{role}'. Debe ser uno de: {', '.join(valid_roles)}")
+    
     async with async_session() as session:
         # Verificar que la conversación existe
         result = await session.execute(
