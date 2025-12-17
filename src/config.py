@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     CHAINLIT_AUTH_SECRET: str 
     
     # Fase 5: Sistema de Memoria - Configuración de Límites
+    # Maximum number of individual messages (not conversation turns) to keep in context
+    # Each conversation turn = 2 messages (user + assistant)
     MAX_CONTEXT_MESSAGES: int = 15
     VISION_MODEL: str = "llama3.2-vision"
     PDF_CHUNK_SIZE: int = 2000

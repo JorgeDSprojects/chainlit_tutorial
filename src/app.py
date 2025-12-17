@@ -84,7 +84,9 @@ async def main(message: cl.Message):
     message_history.append({"role": "user", "content": message.content})
     message_history.append({"role": "assistant", "content": full_response})
     
-    # Truncar historial al límite configurado (mantener los últimos MAX_CONTEXT_MESSAGES)
+    # Truncar historial al límite configurado (mantener los últimos MAX_CONTEXT_MESSAGES mensajes individuales)
+    # Nota: MAX_CONTEXT_MESSAGES cuenta mensajes individuales, no pares de conversación
+    # Por ejemplo, 15 mensajes = ~7 turnos de conversación completos
     if len(message_history) > settings.MAX_CONTEXT_MESSAGES:
         message_history = message_history[-settings.MAX_CONTEXT_MESSAGES:]
     
