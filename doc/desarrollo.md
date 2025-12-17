@@ -49,3 +49,25 @@ Por qué: Fíjate en el multiplicador 0.33x. Es extremadamente barato y rápido.
 🥈 Alternativa: GPT-5-Codex-Mini (Preview)
 
 Por qué: Al igual que Haiku, está optimizado para velocidad, pero con el entrenamiento específico de "Codex". Perfecto para autocompletado inteligente mientras escribes (tipo Ghost text).
+
+
+[Objetivos de la Fase 5
+Memoria a Corto Plazo (Contexto): Que el bot recuerde lo que se acaba de hablar en la sesión actual.
+
+Memoria a Largo Plazo (Persistencia): Guardar cada mensaje en la base de datos (chat.db) vinculado a un usuario y una conversación.]
+
+[
+Guía Fase 6: Threads y Configuración Avanzada
+
+En esta fase convertiremos tu chat en una aplicación profesional con:
+
+Historial en Barra Lateral: Podrás ver chats antiguos, borrarlos y reanudarlos.
+
+Modelos Dinámicos: La lista de modelos de Ollama se cargará automáticamente consultando a tu servidor local. y se podra seleccionar en la configuracion cual es el modelo a utilizar y la temperatura
+Guardar la configuracion por usuario, con los modelos favoritos
+]
+
+[
+Poder cargar archivos PDF, Txt, imagenes
+
+]
