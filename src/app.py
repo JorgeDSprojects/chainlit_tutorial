@@ -4,6 +4,7 @@ from src.db.database import async_session
 from src.db.models import User
 from src.auth.utils import verify_password
 from src.services.llm_service import llm_service
+from src.services.conversation_service import create_conversation, add_message
 from src.config import settings
 
 # --- CALLBACK DE AUTENTICACIÓN ---
@@ -24,6 +25,14 @@ async def start():
     
     if user:
         await cl.Message(f"Hola {user.identifier}, ¡bienvenido de nuevo!").send()
+        
+        # Crear nueva conversación vinculada al usuario (Memoria a Largo Plazo)
+        try:
+            user_id = user.metadata.get("id")
+            conversation = await create_conversation(user_id=user_id, title="Nueva Conversación")
+            cl.user_session.set("conversation_id", conversation.id)
+        except Exception as e:
+            await cl.Message(f"⚠️ Error al crear conversación: {str(e)}").send()
     else:
         # Si se recargó el servidor, la sesión puede perderse momentáneamente en desarrollo
         await cl.Message("Sesión reiniciada. Si tienes problemas, recarga la página.").send()
@@ -63,6 +72,9 @@ async def main(message: cl.Message):
     # Obtener historial de mensajes
     message_history = cl.user_session.get("message_history", [])
     
+    # Obtener conversation_id para guardar en BD
+    conversation_id = cl.user_session.get("conversation_id")
+    
     # Crear mensaje de respuesta
     msg = cl.Message(content="")
     await msg.send()
@@ -92,6 +104,15 @@ async def main(message: cl.Message):
     
     # Guardar historial actualizado en la sesión
     cl.user_session.set("message_history", message_history)
+    
+    # Guardar mensajes en la base de datos (Memoria a Largo Plazo)
+    if conversation_id:
+        try:
+            await add_message(conversation_id=conversation_id, role="user", content=message.content)
+            await add_message(conversation_id=conversation_id, role="assistant", content=full_response)
+        except Exception as e:
+            # Loguear error pero no interrumpir el flujo de conversación
+            print(f"Error guardando mensajes en BD: {str(e)}")
 
 @cl.on_settings_update
 async def setup_agent(settings):
