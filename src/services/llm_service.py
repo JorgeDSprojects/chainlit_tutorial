@@ -1,5 +1,8 @@
 from openai import AsyncOpenAI
 from src.config import settings
+import aiohttp
+from typing import List, Dict
+from urllib.parse import urlparse, urlunparse
 
 class LLMService:
     def __init__(self):
@@ -35,7 +38,35 @@ class LLMService:
         else:
             raise ValueError(f"Proveedor desconocido: {provider}")
 
-    async def stream_response(self, message: str, provider: str, specific_model: str = None, history: list[dict] = None):
+    async def get_ollama_models(self) -> List[str]:
+        """
+        Fetch available models from Ollama API.
+        
+        Returns:
+            List of model names available in Ollama
+        """
+        try:
+            # Extract base URL without /v1 suffix using proper URL parsing
+            parsed = urlparse(settings.OLLAMA_BASE_URL)
+            # Remove /v1 from the path if present
+            path = parsed.path.rstrip('/').removesuffix('/v1')
+            # Construct base URL
+            base_url = urlunparse((parsed.scheme, parsed.netloc, '', '', '', ''))
+            url = f"{base_url}/api/tags"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        models = data.get("models", [])
+                        return [model.get("name", "") for model in models if model.get("name")]
+                    else:
+                        return ["llama2"]  # Fallback default
+        except Exception as e:
+            print(f"Error fetching Ollama models: {str(e)}")
+            return ["llama2"]  # Fallback default
+
+    async def stream_response(self, message: str, provider: str, specific_model: str = None, history: list[dict] = None, temperature: float = 0.7):
         """
         Genera una respuesta en streaming.
         
@@ -44,6 +75,7 @@ class LLMService:
             provider: Proveedor de LLM (ollama, openai, openrouter)
             specific_model: Modelo específico a usar (opcional)
             history: Historial de mensajes previos (opcional)
+            temperature: Temperature for response generation (0.0-1.0)
         """
         client, default_model = self._get_client_and_model(provider)
         
@@ -66,7 +98,8 @@ class LLMService:
             stream = await client.chat.completions.create(
                 model=model,
                 messages=messages,
-                stream=True
+                stream=True,
+                temperature=temperature
             )
             
             async for chunk in stream:

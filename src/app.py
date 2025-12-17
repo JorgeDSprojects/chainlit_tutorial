@@ -4,8 +4,18 @@ from src.db.database import async_session
 from src.db.models import User
 from src.auth.utils import verify_password
 from src.services.llm_service import llm_service
-from src.services.conversation_service import create_conversation, add_message
+from src.services.conversation_service import create_conversation, add_message, get_conversation_history
 from src.config import settings
+from src.services.chainlit_data_layer import ChainlitDataLayer
+from src.services.user_settings_service import (
+    get_or_create_settings, 
+    save_settings,
+    DEFAULT_MODEL,
+    DEFAULT_TEMPERATURE
+)
+
+# Register data layer for thread/history support
+cl.data_layer = ChainlitDataLayer()
 
 # --- CALLBACK DE AUTENTICACIÓN ---
 @cl.password_auth_callback
@@ -22,6 +32,8 @@ async def auth(username: str, password: str):
 async def start():
     # SOLUCIÓN ERROR: Verificar si el usuario existe antes de usarlo
     user = cl.user_session.get("user")
+    user_id = None
+    user_settings_data = None
     
     if user:
         await cl.Message(f"Hola {user.identifier}, ¡bienvenido de nuevo!").send()
@@ -33,6 +45,9 @@ async def start():
                 raise ValueError("El usuario no tiene un ID válido en metadata")
             conversation = await create_conversation(user_id=user_id, title="Nueva Conversación")
             cl.user_session.set("conversation_id", conversation.id)
+            
+            # Load user settings
+            user_settings_data = await get_or_create_settings(user_id)
         except Exception as e:
             await cl.Message(f"⚠️ Error al crear conversación: {str(e)}").send()
     else:
@@ -42,7 +57,19 @@ async def start():
     # Inicializar historial de mensajes para memoria a corto plazo
     cl.user_session.set("message_history", [])
 
-    # Configuración del chat (Widgets)
+    # Get available Ollama models dynamically
+    ollama_models = await llm_service.get_ollama_models()
+    
+    # Get initial values from user settings or use defaults
+    initial_model = user_settings_data.get("default_model", DEFAULT_MODEL) if user_settings_data else DEFAULT_MODEL
+    initial_temperature = user_settings_data.get("temperature", DEFAULT_TEMPERATURE) if user_settings_data else DEFAULT_TEMPERATURE
+    
+    # Find the index of the initial model in the list
+    initial_model_index = 0
+    if initial_model in ollama_models:
+        initial_model_index = ollama_models.index(initial_model)
+    
+    # Configuración del chat (Widgets) with dynamic models and user settings
     chat_settings = await cl.ChatSettings(
         [
             cl.input_widget.Select(
@@ -51,25 +78,91 @@ async def start():
                 values=["ollama", "openai", "openrouter"],
                 initial_index=0
             ),
-            cl.input_widget.TextInput(
+            cl.input_widget.Select(
                 id="ModelName",
-                label="Nombre del Modelo (Opcional)",
-                initial="llama2",
-                description="Ej: gpt-4, llama3, mistralai/mistral-7b-instruct"
+                label="Modelo",
+                values=ollama_models,
+                initial_index=initial_model_index
+            ),
+            cl.input_widget.Slider(
+                id="Temperature",
+                label="Temperatura",
+                initial=initial_temperature,
+                min=0.0,
+                max=1.0,
+                step=0.1,
+                description="Controla la creatividad: 0.0 = preciso, 1.0 = creativo"
             )
         ]
     ).send()
+
+@cl.on_chat_resume
+async def on_chat_resume(thread: dict):
+    """
+    Called when a user resumes a previous conversation from the history sidebar.
+    Loads the conversation history from the database and repopulates the session.
+    """
+    # Get thread/conversation ID
+    thread_id = thread.get("id")
+    if not thread_id:
+        await cl.Message("⚠️ No se pudo cargar el historial: ID de conversación no válido").send()
+        return
+    
+    # Set the conversation_id in session
+    cl.user_session.set("conversation_id", int(thread_id))
+    
+    # Load conversation history from database
+    try:
+        history = await get_conversation_history(conversation_id=int(thread_id))
+        
+        # Populate the message_history in session
+        cl.user_session.set("message_history", history)
+        
+        # Display previous messages to user
+        if history:
+            # Display each message based on its role
+            for msg in history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                
+                if role == "user":
+                    await cl.Message(
+                        content=content,
+                        author="user"
+                    ).send()
+                elif role == "assistant":
+                    await cl.Message(
+                        content=content,
+                        author="assistant"
+                    ).send()
+                elif role == "system":
+                    # Optionally display system messages differently
+                    await cl.Message(
+                        content=f"**System:** {content}",
+                        author="system"
+                    ).send()
+            
+            await cl.Message(f"✅ Conversación cargada con {len(history)} mensajes. Puedes continuar donde lo dejaste.").send()
+        else:
+            await cl.Message("📝 Conversación vacía. Comienza a chatear.").send()
+            
+    except Exception as e:
+        await cl.Message(f"⚠️ Error al cargar el historial: {str(e)}").send()
+        # Initialize empty history on error
+        cl.user_session.set("message_history", [])
 
 @cl.on_message
 async def main(message: cl.Message):
     # Obtener configuración del chat
     chat_settings = cl.user_session.get("chat_settings")
     provider = "ollama"
-    model_name = "llama2"
+    model_name = DEFAULT_MODEL
+    temperature = DEFAULT_TEMPERATURE
     
     if chat_settings:
         provider = chat_settings.get("ModelProvider", "ollama")
-        model_name = chat_settings.get("ModelName", None)
+        model_name = chat_settings.get("ModelName", DEFAULT_MODEL)
+        temperature = chat_settings.get("Temperature", DEFAULT_TEMPERATURE)
 
     # Obtener historial de mensajes
     message_history = cl.user_session.get("message_history", [])
@@ -87,7 +180,8 @@ async def main(message: cl.Message):
         message=message.content, 
         provider=provider, 
         specific_model=model_name,
-        history=message_history
+        history=message_history,
+        temperature=temperature
     ):
         full_response += token
         await msg.stream_token(token)
@@ -117,6 +211,25 @@ async def main(message: cl.Message):
             print(f"Error guardando mensajes en BD: {str(e)}")
 
 @cl.on_settings_update
-async def setup_agent(settings):
-    cl.user_session.set("chat_settings", settings)
-    await cl.Message(content=f"✅ Proveedor cambiado a: {settings['ModelProvider']}").send()
+async def setup_agent(settings_dict):
+    # Update session settings
+    cl.user_session.set("chat_settings", settings_dict)
+    
+    # Persist settings to database if user is logged in
+    user = cl.user_session.get("user")
+    if user:
+        try:
+            user_id = user.metadata.get("id")
+            if user_id:
+                await save_settings(
+                    user_id=user_id,
+                    default_model=settings_dict.get("ModelName"),
+                    temperature=settings_dict.get("Temperature")
+                )
+                await cl.Message(content=f"✅ Configuración guardada: {settings_dict.get('ModelName')} a temperatura {settings_dict.get('Temperature')}").send()
+            else:
+                await cl.Message(content=f"✅ Configuración actualizada (no guardada - sin user_id)").send()
+        except Exception as e:
+            await cl.Message(content=f"⚠️ Error al guardar configuración: {str(e)}").send()
+    else:
+        await cl.Message(content=f"✅ Configuración actualizada para esta sesión").send()
