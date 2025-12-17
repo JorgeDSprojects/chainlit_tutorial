@@ -79,3 +79,6 @@ pip-wheel-metadata/
 # Chainlit local logs or DBs (if any)
 chainlit.logs
 *.db
+
+# Chainlit translation files
+.chainlit/translations/
