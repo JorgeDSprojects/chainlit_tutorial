@@ -35,20 +35,32 @@ class LLMService:
         else:
             raise ValueError(f"Proveedor desconocido: {provider}")
 
-    async def stream_response(self, message: str, provider: str, specific_model: str = None):
+    async def stream_response(self, message: str, provider: str, specific_model: str = None, history: list[dict] = None):
         """
         Genera una respuesta en streaming.
+        
+        Args:
+            message: El mensaje actual del usuario
+            provider: Proveedor de LLM (ollama, openai, openrouter)
+            specific_model: Modelo específico a usar (opcional)
+            history: Historial de mensajes previos (opcional)
         """
         client, default_model = self._get_client_and_model(provider)
         
         # Si la UI nos manda un modelo específico, lo usamos, si no, el default
         model = specific_model if specific_model else default_model
 
-        # Mensajes básicos (En la Fase 5 meteremos el historial real aquí)
+        # Construir mensajes con historial
         messages = [
-            {"role": "system", "content": "Eres un asistente útil y conciso."},
-            {"role": "user", "content": message}
+            {"role": "system", "content": "Eres un asistente útil y conciso."}
         ]
+        
+        # Añadir historial si existe
+        if history:
+            messages.extend(history)
+        
+        # Añadir el mensaje actual
+        messages.append({"role": "user", "content": message})
 
         try:
             stream = await client.chat.completions.create(
