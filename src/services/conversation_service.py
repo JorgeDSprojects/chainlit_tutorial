@@ -8,13 +8,14 @@ from src.db.models import Conversation, Message, User
 from typing import Optional, List, Dict
 
 
-async def create_conversation(user_id: int, title: str = "Nueva Conversación") -> Conversation:
+async def create_conversation(user_id: int, title: str = "Nueva Conversación", thread_id: Optional[str] = None) -> Conversation:
     """
     Crea una nueva conversación vinculada a un usuario.
     
     Args:
         user_id: ID del usuario propietario de la conversación
         title: Título de la conversación (por defecto "Nueva Conversación")
+        thread_id: ID del thread de Chainlit (UUID) para integración
         
     Returns:
         Conversation: La conversación creada
@@ -30,7 +31,8 @@ async def create_conversation(user_id: int, title: str = "Nueva Conversación") 
         # Crear nueva conversación
         conversation = Conversation(
             title=title,
-            user_id=user_id
+            user_id=user_id,
+            thread_id=thread_id
         )
         
         session.add(conversation)

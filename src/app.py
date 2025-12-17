@@ -5,7 +5,11 @@ from src.db.models import User
 from src.auth.utils import verify_password
 from src.services.llm_service import llm_service
 from src.services.conversation_service import create_conversation, add_message
+from src.services.chainlit_data_layer import ChainlitDataLayer
 from src.config import settings
+
+# Initialize and set the custom data layer
+cl.data_layer = ChainlitDataLayer()
 
 # --- CALLBACK DE AUTENTICACIÓN ---
 @cl.password_auth_callback
@@ -20,21 +24,39 @@ async def auth(username: str, password: str):
 
 @cl.on_chat_start
 async def start():
+    # Get the current thread_id from Chainlit's session
+    from chainlit.context import context
+    thread_id = context.session.thread_id
+    thread_id_to_resume = context.session.thread_id_to_resume
+    
     # SOLUCIÓN ERROR: Verificar si el usuario existe antes de usarlo
     user = cl.user_session.get("user")
     
     if user:
-        await cl.Message(f"Hola {user.identifier}, ¡bienvenido de nuevo!").send()
+        user_id = user.metadata.get("id")
         
-        # Crear nueva conversación vinculada al usuario (Memoria a Largo Plazo)
-        try:
-            user_id = user.metadata.get("id")
-            if user_id is None:
-                raise ValueError("El usuario no tiene un ID válido en metadata")
-            conversation = await create_conversation(user_id=user_id, title="Nueva Conversación")
-            cl.user_session.set("conversation_id", conversation.id)
-        except Exception as e:
-            await cl.Message(f"⚠️ Error al crear conversación: {str(e)}").send()
+        if thread_id_to_resume:
+            # User clicked on an old conversation - load it from database
+            await cl.Message(f"Hola {user.identifier}, continuemos con esta conversación.").send()
+            # The data layer will automatically load the conversation history
+            # No need to do anything else - Chainlit handles it
+        else:
+            # New conversation - create it in the database with Chainlit's thread_id
+            await cl.Message(f"Hola {user.identifier}, ¡bienvenido de nuevo!").send()
+            
+            try:
+                if user_id is None:
+                    raise ValueError("El usuario no tiene un ID válido en metadata")
+                    
+                # Create new conversation with Chainlit's thread_id
+                conversation = await create_conversation(
+                    user_id=user_id, 
+                    title="Nueva Conversación",
+                    thread_id=thread_id
+                )
+                cl.user_session.set("conversation_id", conversation.id)
+            except Exception as e:
+                await cl.Message(f"⚠️ Error al crear conversación: {str(e)}").send()
     else:
         # Si se recargó el servidor, la sesión puede perderse momentáneamente en desarrollo
         await cl.Message("Sesión reiniciada. Si tienes problemas, recarga la página.").send()
@@ -107,14 +129,9 @@ async def main(message: cl.Message):
     # Guardar historial actualizado en la sesión
     cl.user_session.set("message_history", message_history)
     
-    # Guardar mensajes en la base de datos (Memoria a Largo Plazo)
-    if conversation_id:
-        try:
-            await add_message(conversation_id=conversation_id, role="user", content=message.content)
-            await add_message(conversation_id=conversation_id, role="assistant", content=full_response)
-        except Exception as e:
-            # Loguear error pero no interrumpir el flujo de conversación
-            print(f"Error guardando mensajes en BD: {str(e)}")
+    # NOTE: Messages are now automatically saved by the Chainlit Data Layer
+    # The data layer's create_step() method is called automatically when messages are sent
+    # No need for manual message saving here
 
 @cl.on_settings_update
 async def setup_agent(settings):

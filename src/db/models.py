@@ -18,6 +18,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(String, unique=True, index=True, nullable=True)  # Chainlit thread ID (UUID)
     title = Column(String, default="Nueva Conversación")
     user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
