@@ -79,3 +79,11 @@ pip-wheel-metadata/
 # Chainlit local logs or DBs (if any)
 chainlit.logs
 *.db
+
+# Development test scripts (not needed in production)
+test_data_layer.py
+create_test_user.py
+
+# Environment and database files (should not be committed)
+.env
+chat.db
