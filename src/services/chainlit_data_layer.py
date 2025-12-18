@@ -25,6 +25,10 @@ class ChainlitDataLayer(BaseDataLayer):
     Custom data layer that integrates Chainlit with our SQLite database.
     Implements conversation history and thread management.
     """
+
+    def __init__(self):
+        # Map Chainlit step IDs -> message DB IDs to support streaming updates
+        self._step_message_map: Dict[str, int] = {}
     
     async def get_user(self, identifier: str) -> Optional[PersistedUser]:
         """Get user by identifier (email) and return Chainlit PersistedUser."""
@@ -94,6 +98,13 @@ class ChainlitDataLayer(BaseDataLayer):
             
             if not conversation:
                 return None
+
+            user_identifier = None
+            user_result = await session.execute(
+                select(User).filter(User.id == conversation.user_id)
+            )
+            if user_db := user_result.scalars().first():
+                user_identifier = user_db.email
             
             # Get all messages for this conversation
             messages_result = await session.execute(
@@ -107,6 +118,8 @@ class ChainlitDataLayer(BaseDataLayer):
             steps = []
             for msg in messages:
                 step_type = "user_message" if msg.role == "user" else "assistant_message"
+                content = msg.content or ""
+                # Chainlit usa "output" para renderizar tanto mensajes de usuario como del asistente
                 steps.append({
                     "id": str(msg.id),
                     "name": msg.role,
@@ -114,8 +127,8 @@ class ChainlitDataLayer(BaseDataLayer):
                     "threadId": thread_id,
                     "parentId": None,
                     "streaming": False,
-                    "input": msg.content if msg.role == "user" else "",
-                    "output": msg.content if msg.role != "user" else "",
+                    "input": content if msg.role == "user" else "",
+                    "output": content,
                     "createdAt": msg.created_at.isoformat() if msg.created_at else None,
                     "metadata": {},
                     "tags": []
@@ -127,7 +140,7 @@ class ChainlitDataLayer(BaseDataLayer):
                 "name": conversation.title,
                 "createdAt": conversation.created_at.isoformat() if conversation.created_at else None,
                 "userId": str(conversation.user_id),
-                "userIdentifier": None,
+                "userIdentifier": user_identifier,
                 "steps": steps,
                 "metadata": {},
                 "tags": []
@@ -178,17 +191,26 @@ class ChainlitDataLayer(BaseDataLayer):
             count_result = await session.execute(count_query)
             total = count_result.scalar() or 0
             
+            # Prepare map of user identifiers to avoid repeated queries
+            user_ids = {conv.user_id for conv in conversations if conv.user_id}
+            user_map: Dict[int, str] = {}
+            if user_ids:
+                users_result = await session.execute(select(User).filter(User.id.in_(user_ids)))
+                for user in users_result.scalars().all():
+                    user_map[user.id] = user.email
+
             # Convert to ThreadDict format (without loading all messages)
             threads = []
             for conv in conversations:
                 # Use thread_id if available, otherwise fall back to str(id)
                 thread_id = conv.thread_id if conv.thread_id else str(conv.id)
+                user_identifier = user_map.get(conv.user_id)
                 threads.append({
                     "id": thread_id,
                     "name": conv.title,
                     "createdAt": conv.created_at.isoformat() if conv.created_at else None,
                     "userId": str(conv.user_id),
-                    "userIdentifier": None,
+                    "userIdentifier": user_identifier,
                     "steps": [],  # Don't load all steps in list view
                     "metadata": {},
                     "tags": []
@@ -239,16 +261,17 @@ class ChainlitDataLayer(BaseDataLayer):
             step_type = step_dict.get("type", "")
             if "user" in step_type:
                 role = "user"
-                content = step_dict.get("input", "")
             elif "assistant" in step_type:
                 role = "assistant"
-                content = step_dict.get("output", "")
             else:
                 role = "system"
-                content = step_dict.get("output", step_dict.get("input", ""))
+
+            # Chainlit envía el texto principal en "output" para ambos roles.
+            # Usamos "input" solo como respaldo.
+            content = step_dict.get("output") or step_dict.get("input", "")
             
-            # Only save if there's content
-            if not content:
+            # Allow assistant placeholders (empty content) so we can update after streaming
+            if not content and role != "assistant":
                 return
             
             # Create message
@@ -259,11 +282,66 @@ class ChainlitDataLayer(BaseDataLayer):
             )
             
             session.add(message)
+            await session.flush()
+
+            # Track message id for future updates
+            step_id = step_dict.get("id")
+            if step_id and message.id:
+                self._step_message_map[step_id] = message.id
+
             await session.commit()
     
     async def update_step(self, step_dict: StepDict):
-        """Update an existing step - not implemented."""
-        pass
+        """Update assistant messages after streaming completes."""
+        step_id = step_dict.get("id")
+        if not step_id:
+            return
+
+        content = step_dict.get("output") or step_dict.get("input", "")
+        if not content:
+            return
+
+        step_type = step_dict.get("type", "")
+        if "assistant" in step_type:
+            role = "assistant"
+        elif "user" in step_type:
+            role = "user"
+        else:
+            role = "system"
+
+        async with async_session() as session:
+            message = None
+
+            if step_id in self._step_message_map:
+                message_id = self._step_message_map[step_id]
+                result = await session.execute(
+                    select(Message).filter(Message.id == message_id)
+                )
+                message = result.scalars().first()
+
+            if not message:
+                # Fallback: locate the most recent message for this conversation and role
+                thread_id = step_dict.get("threadId")
+                conversation = await self._get_conversation_by_thread(session, thread_id)
+                if not conversation:
+                    return
+
+                result = await session.execute(
+                    select(Message)
+                    .filter(
+                        Message.conversation_id == conversation.id,
+                        Message.role == role,
+                    )
+                    .order_by(desc(Message.created_at))
+                    .limit(1)
+                )
+                message = result.scalars().first()
+
+            if not message:
+                return
+
+            message.content = content
+            await session.commit()
     
     async def delete_step(self, step_id: str):
         """Delete a step - not implemented."""

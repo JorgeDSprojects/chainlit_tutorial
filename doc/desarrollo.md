@@ -1,4 +1,23 @@
-Nos hemos quedado en la fase 5, aqui tendremos que definir la memoria a corto plazo y largo plazo.
+### 6.1 Data Layer para Chainlit
+- **Archivo nuevo**: `src/services/chainlit_data_layer.py`
+- **Implementar**: `BaseDataLayer` de Chainlit
+- **Métodos**: `get_user_threads()`, `get_thread()`, `delete_thread()`, `create_step()`, `update_thread()`
+- **Validación**: 
+  1. Iniciar sesión
+  2. Ver barra lateral con historial
+  3. ✅ Click en chat antiguo → Se carga la conversación
+
+### 6.2 Reanudar Conversaciones
+- **Archivo**: `src/app.py`
+- **Implementar**: `@cl.on_chat_resume`
+- **Lógica**: Cargar historial de BD → Popular `cl.user_session["history"]` → Mostrar mensajes previos
+- **Validación**: 
+  1. Tener conversación con 5 mensajes
+  2. Cerrar chat
+  3. Reabrir desde historial
+  4. ✅ Ver los 5 mensajes y poder continuar
+
+No carga la conversación correctamente: Revisa 
 
 
 | Fase del Proyecto | Modelo Recomendado (Top 1) | Modelo Alternativo | Razón Principal |

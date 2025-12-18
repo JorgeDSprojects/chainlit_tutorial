@@ -1,10 +1,15 @@
 import chainlit as cl
+from chainlit.types import ThreadDict
 from sqlalchemy.future import select
 from src.db.database import async_session
 from src.db.models import User
 from src.auth.utils import verify_password
 from src.services.llm_service import llm_service
-from src.services.conversation_service import create_conversation, add_message
+from src.services.conversation_service import (
+    create_conversation,
+    get_conversation_by_thread,
+    get_conversation_history,
+)
 from src.services.chainlit_data_layer import ChainlitDataLayer
 from src.config import settings
 
@@ -51,11 +56,18 @@ async def start():
             user_identifier = None
         
         if thread_id_to_resume:
-            # User clicked on an old conversation - load it from database
+            # User clicked on an old conversation - aseguramos conversación cargada
+            if cl.user_session.get("conversation_id") is None:
+                conversation = await get_conversation_by_thread(thread_id_to_resume)
+                if conversation:
+                    cl.user_session.set("conversation_id", conversation.id)
+                    history = await get_conversation_history(conversation.id)
+                    if len(history) > settings.MAX_CONTEXT_MESSAGES:
+                        history = history[-settings.MAX_CONTEXT_MESSAGES:]
+                    cl.user_session.set("message_history", history)
+
             name = user_identifier or "usuario"
             await cl.Message(f"Hola {name}, continuemos con esta conversación.").send()
-            # The data layer will automatically load the conversation history
-            # No need to do anything else - Chainlit handles it
         else:
             # New conversation - create it in the database with Chainlit's thread_id
             name = user_identifier or "usuario"
@@ -78,8 +90,9 @@ async def start():
         # Si se recargó el servidor, la sesión puede perderse momentáneamente en desarrollo
         await cl.Message("Sesión reiniciada. Si tienes problemas, recarga la página.").send()
 
-    # Inicializar historial de mensajes para memoria a corto plazo
-    cl.user_session.set("message_history", [])
+    # Inicializar historial de mensajes para memoria a corto plazo solo si no existe
+    if cl.user_session.get("message_history") is None:
+        cl.user_session.set("message_history", [])
 
     # Configuración del chat (Widgets)
     chat_settings = await cl.ChatSettings(
@@ -98,6 +111,28 @@ async def start():
             )
         ]
     ).send()
+
+@cl.on_chat_resume
+async def resume_chat(thread: ThreadDict):
+    """Rehidrata la sesión cuando se abre una conversación desde el historial."""
+    thread_id = thread.get("id") if isinstance(thread, dict) else getattr(thread, "id", None)
+
+    conversation = await get_conversation_by_thread(thread_id)
+    if not conversation:
+        cl.user_session.set("conversation_id", None)
+        cl.user_session.set("message_history", [])
+        await cl.Message("⚠️ No encontré esta conversación en la base de datos.").send()
+        return
+
+    cl.user_session.set("conversation_id", conversation.id)
+
+    history = await get_conversation_history(conversation.id)
+    if len(history) > settings.MAX_CONTEXT_MESSAGES:
+        history = history[-settings.MAX_CONTEXT_MESSAGES:]
+
+    cl.user_session.set("message_history", history)
+    await cl.Message("📂 Conversación reanudada. Puedes continuar donde la dejaste.").send()
+
 
 @cl.on_message
 async def main(message: cl.Message):

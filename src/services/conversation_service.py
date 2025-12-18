@@ -42,6 +42,18 @@ async def create_conversation(user_id: int, title: str = "Nueva Conversación", 
         return conversation
 
 
+async def get_conversation_by_thread(thread_id: Optional[str]) -> Optional[Conversation]:
+    """Obtiene una conversación asociada a un thread específico."""
+    if not thread_id:
+        return None
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(Conversation).filter(Conversation.thread_id == thread_id)
+        )
+        return result.scalars().first()
+
+
 async def add_message(conversation_id: int, role: str, content: str) -> Message:
     """
     Añade un mensaje a una conversación existente.
