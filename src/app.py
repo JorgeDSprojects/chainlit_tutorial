@@ -98,22 +98,41 @@ async def start():
         cl.user_session.set("message_history", [])
 
     # Configuración del chat (Widgets)
-    chat_settings = await cl.ChatSettings(
-        [
-            cl.input_widget.Select(
-                id="ModelProvider",
-                label="Proveedor de IA",
-                values=["ollama", "openai", "openrouter"],
-                initial_index=0
-            ),
-            cl.input_widget.TextInput(
-                id="ModelName",
-                label="Nombre del Modelo (Opcional)",
-                initial="llama2",
-                description="Ej: gpt-4, llama3, mistralai/mistral-7b-instruct"
-            )
-        ]
-    ).send()
+    # Obtener modelos de Ollama dinámicamente
+    ollama_models = await llm_service.get_ollama_models()
+    
+    # Construir widgets de configuración
+    widgets = [
+        cl.input_widget.Select(
+            id="ModelProvider",
+            label="Proveedor de IA",
+            values=["ollama", "openai", "openrouter"],
+            initial_index=0
+        ),
+        cl.input_widget.Select(
+            id="OllamaModel",
+            label="Modelo de Ollama",
+            values=ollama_models,
+            initial_index=0
+        ),
+        cl.input_widget.TextInput(
+            id="ModelName",
+            label="Nombre del Modelo (Override - Opcional)",
+            initial="",
+            description="Deja vacío para usar el modelo seleccionado arriba. Ej: gpt-4, mistralai/mistral-7b-instruct"
+        ),
+        cl.input_widget.Slider(
+            id="Temperature",
+            label="Temperatura",
+            initial=0.7,
+            min=0.0,
+            max=2.0,
+            step=0.1,
+            description="Controla la aleatoriedad: 0=determinista, 2=muy creativo"
+        )
+    ]
+    
+    chat_settings = await cl.ChatSettings(widgets).send()
 
 @cl.on_chat_resume
 async def resume_chat(thread: ThreadDict):
@@ -142,11 +161,16 @@ async def main(message: cl.Message):
     # Obtener configuración del chat
     chat_settings = cl.user_session.get("chat_settings")
     provider = "ollama"
-    model_name = "llama2"
+    model_name = None
+    temperature = 0.7
     
     if chat_settings:
         provider = chat_settings.get("ModelProvider", "ollama")
-        model_name = chat_settings.get("ModelName", None)
+        # Si ModelName (override) está vacío, usar OllamaModel seleccionado
+        model_name = chat_settings.get("ModelName", "")
+        if not model_name and provider == "ollama":
+            model_name = chat_settings.get("OllamaModel", "llama2")
+        temperature = chat_settings.get("Temperature", 0.7)
 
     # Obtener historial de mensajes
     message_history = cl.user_session.get("message_history", [])
@@ -164,7 +188,8 @@ async def main(message: cl.Message):
         message=message.content, 
         provider=provider, 
         specific_model=model_name,
-        history=message_history
+        history=message_history,
+        temperature=temperature
     ):
         full_response += token
         await msg.stream_token(token)
