@@ -1,7 +1,10 @@
 from openai import AsyncOpenAI
 from src.config import settings
 import httpx
+import logging
 from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 class LLMService:
     def __init__(self):
@@ -41,7 +44,7 @@ class LLMService:
                 
         except Exception as e:
             # Si falla la conexión, retornar modelos por defecto
-            print(f"Error al obtener modelos de Ollama: {e}")
+            logger.warning(f"Error al obtener modelos de Ollama: {e}")
             return ["llama2", "llama3", "mistral"]
 
     def _get_client_and_model(self, provider: str):
@@ -76,8 +79,8 @@ class LLMService:
         self, 
         message: str, 
         provider: str, 
-        specific_model: str = None, 
-        history: list[dict] = None,
+        specific_model: Optional[str] = None, 
+        history: Optional[List[dict]] = None,
         temperature: float = 0.7
     ):
         """
@@ -88,7 +91,8 @@ class LLMService:
             provider: Proveedor de LLM (ollama, openai, openrouter)
             specific_model: Modelo específico a usar (opcional)
             history: Historial de mensajes previos (opcional)
-            temperature: Temperatura para la generación (0.0-2.0, default 0.7)
+            temperature: Temperatura para la generación (rango: 0.0-2.0, default: 0.7)
+                        0.0 = determinista, 2.0 = muy creativo
         """
         client, default_model = self._get_client_and_model(provider)
         
