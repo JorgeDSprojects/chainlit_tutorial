@@ -14,9 +14,12 @@ from src.services.chainlit_data_layer import ChainlitDataLayer
 from src.config import settings
 
 # Initialize and register the custom data layer with Chainlit
+# Create a single instance to maintain state across calls
+_data_layer_instance = ChainlitDataLayer()
+
 @cl.data_layer
 def configure_data_layer():
-    return ChainlitDataLayer()
+    return _data_layer_instance
 
 # --- CALLBACK DE AUTENTICACIÓN ---
 @cl.password_auth_callback

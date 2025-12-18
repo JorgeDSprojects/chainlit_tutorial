@@ -4,6 +4,7 @@ This connects Chainlit's conversation history feature with our existing database
 """
 from typing import Optional, Dict, List
 from datetime import datetime
+import asyncio
 from chainlit.data import BaseDataLayer
 from chainlit.types import (
     ThreadDict,
@@ -28,7 +29,16 @@ class ChainlitDataLayer(BaseDataLayer):
 
     def __init__(self):
         # Map Chainlit step IDs -> message DB IDs to support streaming updates
+        # Protected by asyncio lock for thread-safe concurrent access in async context
         self._step_message_map: Dict[str, int] = {}
+        self._map_lock = None  # Initialized lazily in async context
+    
+    def _get_lock(self):
+        """Get or create the asyncio lock in the current event loop."""
+        if self._map_lock is None:
+            import asyncio
+            self._map_lock = asyncio.Lock()
+        return self._map_lock
     
     async def get_user(self, identifier: str) -> Optional[PersistedUser]:
         """Get user by identifier (email) and return Chainlit PersistedUser."""
@@ -284,10 +294,11 @@ class ChainlitDataLayer(BaseDataLayer):
             session.add(message)
             await session.flush()
 
-            # Track message id for future updates
+            # Track message id for future updates (thread-safe)
             step_id = step_dict.get("id")
             if step_id and message.id:
-                self._step_message_map[step_id] = message.id
+                async with self._get_lock():
+                    self._step_message_map[step_id] = message.id
 
             await session.commit()
     
@@ -312,8 +323,11 @@ class ChainlitDataLayer(BaseDataLayer):
         async with async_session() as session:
             message = None
 
-            if step_id in self._step_message_map:
-                message_id = self._step_message_map[step_id]
+            # Check map for step_id (thread-safe)
+            async with self._get_lock():
+                message_id = self._step_message_map.get(step_id)
+            
+            if message_id:
                 result = await session.execute(
                     select(Message).filter(Message.id == message_id)
                 )
