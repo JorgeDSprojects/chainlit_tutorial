@@ -280,15 +280,16 @@ class ChainlitDataLayer(BaseDataLayer):
             # Usamos "input" solo como respaldo.
             content = step_dict.get("output") or step_dict.get("input", "")
             
-            # Allow assistant placeholders (empty content) so we can update after streaming
+            # Skip empty messages for non-assistant roles
             if not content and role != "assistant":
                 return
             
-            # Create message
+            # For assistant messages, always create even if empty (will be updated via update_step)
+            # Create message with empty string as default to ensure it's always saved
             message = Message(
                 conversation_id=conversation.id,
                 role=role,
-                content=content
+                content=content if content else ""
             )
             
             session.add(message)
